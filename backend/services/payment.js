@@ -1,50 +1,105 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+import axios from 'axios'
+
+const MP_BASE_URL = 'https://api.mercadopago.com'
+const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN
+
+if (!MP_ACCESS_TOKEN || MP_ACCESS_TOKEN.startsWith('APP_USR-xxx')) {
+  console.warn('⚠️  MP_ACCESS_TOKEN não configurado. Pagamentos reais desativados.')
+}
 
 /**
- * Creates a payment preference and returns MP checkout link
+ * Creates a Mercado Pago payment preference
+ * Returns: { preferenceId, initPoint }
  */
-export async function createPaymentPreference(orderData) {
-  try {
-    const response = await fetch(`${API_URL}/api/payment/create-preference`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+export async function createPreference({ items, payer }) {
+  const total = items.reduce((acc, i) => acc + i.price * i.qty, 0)
+
+  const payload = {
+    items: items.map(item => ({
+      title: item.name,
+      quantity: item.qty,
+      unit_price: item.price,
+      currency_id: 'BRL',
+    })),
+    payer: {
+      name: payer.nome,
+      surname: payer.sobrenome,
+      email: payer.email || 'customer@quebrada.store',
+      phone: {
+        area_code: payer.whatsapp.slice(1, 3),
+        number: payer.whatsapp.slice(6),
       },
-      body: JSON.stringify(orderData),
-    })
+      identification: {
+        type: 'CPF',
+        number: payer.cpf.replace(/\D/g, ''),
+      },
+      address: {
+        zip_code: payer.cep?.replace(/\D/g, ''),
+        street_name: payer.logradouro,
+        street_number: payer.numero,
+      },
+    },
+    back_urls: {
+      success: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/checkout/success`,
+      failure: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/checkout/fail`,
+      pending: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/checkout/pending`,
+    },
+    auto_return: 'approved',
+    notification_url: `${process.env.BACKEND_URL || 'http://localhost:3001'}/api/payment/webhook`,
+    external_reference: `order-${Date.now()}`,
+    statement_descriptor: 'QUEBRADA STORE',
+  }
 
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || 'Erro ao criar preferência de pagamento')
+  try {
+    const response = await axios.post(
+      `${MP_BASE_URL}/checkout/preferences`,
+      payload,
+      {
+        headers: {
+          'Authorization': `Bearer ${MP_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    )
+
+    return {
+      preferenceId: response.data.id,
+      initPoint: response.data.init_point,
+      sandboxInitPoint: response.data.sandbox_init_point,
     }
-
-    return await response.json()
-  } catch (err) {
-    console.error('❌ Payment preference error:', err)
-    throw err
+  } catch (error) {
+    console.error('❌ Erro ao criar preferência:', error.response?.data || error.message)
+    throw new Error(`Mercado Pago: ${error.response?.data?.message || error.message}`)
   }
 }
 
 /**
- * Gets payment status by ID
+ * Gets payment details from Mercado Pago
+ * Returns: { id, status, status_detail, payer, transaction_amount, ... }
  */
-export async function getPaymentStatus(paymentId) {
+export async function getPaymentDetails(paymentId) {
   try {
-    const response = await fetch(`${API_URL}/api/payment/status/${paymentId}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
+    const response = await axios.get(
+      `${MP_BASE_URL}/v1/payments/${paymentId}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${MP_ACCESS_TOKEN}`,
+        },
+      }
+    )
 
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || 'Erro ao buscar status do pagamento')
+    return {
+      id: response.data.id,
+      status: response.data.status,
+      status_detail: response.data.status_detail,
+      payer: response.data.payer,
+      transaction_amount: response.data.transaction_amount,
+      description: response.data.description,
+      created_at: response.data.date_created,
+      approved_at: response.data.date_approved,
     }
-
-    return await response.json()
-  } catch (err) {
-    console.error('❌ Payment status error:', err)
-    throw err
+  } catch (error) {
+    console.error('❌ Erro ao buscar status:', error.response?.data || error.message)
+    throw new Error(`Mercado Pago: ${error.response?.data?.message || error.message}`)
   }
 }
