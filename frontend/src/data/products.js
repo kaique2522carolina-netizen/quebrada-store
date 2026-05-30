@@ -2,7 +2,7 @@ export const CATEGORIES = [
   { id: 1, name: 'Camisetas', emoji: '👕', slug: 'camisetas' },
   { id: 2, name: 'Bonés', emoji: '🧢', slug: 'bones' },
   { id: 3, name: 'Calças', emoji: '👖', slug: 'calcas' },
-  { id: 4, name: 'Tênis', emoji: '👟', slug: 'tenis' },
+  { id: 4, name: 'Tênis', emoji: 'https://ibb.co/cSwSQCyc', slug: 'tenis' },
   { id: 5, name: 'Moletons', emoji: '🧥', slug: 'moletons' },
   { id: 6, name: 'Acessórios', emoji: '⌚', slug: 'acessorios' },
 ]
